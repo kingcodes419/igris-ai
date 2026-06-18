@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { 
   Send, Bot, CornerDownLeft, Sparkles, Check, Copy, Flame, 
   Terminal, ShieldAlert, BookOpen, Layers, Menu, HelpCircle, Code, Download,
@@ -6,6 +6,7 @@ import {
   Upload, Paperclip, Loader2, FileCode, FileText, File, Image, AlertTriangle
 } from "lucide-react";
 import { motion } from "motion/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Message, AppConfig, UploadedFile } from "../types";
 import CodeSnippet, { parseMarkdownBlocks } from "./CodeSnippet";
 import { useAttachments } from "../hooks/useAttachments";
@@ -31,7 +32,7 @@ interface ChatInterfaceProps {
   onShowToast?: (type: "success" | "error" | "info", text: string) => void;
 }
 
-export default function ChatInterface({
+function ChatInterface({
   messages,
   onSendMessage,
   isSending,
@@ -56,7 +57,8 @@ export default function ChatInterface({
   const [showDropdown, setShowDropdown] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesParentRef = useRef<HTMLDivElement | null>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
 
   // Tap-to-copy state for glassy user chat bubbles
   const [tappedMessageId, setTappedMessageId] = useState<string | null>(null);
@@ -187,7 +189,7 @@ export default function ChatInterface({
     }
   };
 
-  const handleCopyMessage = (msgId: string, content: string) => {
+  const handleCopyMessage = useCallback((msgId: string, content: string) => {
     const fallbackCopy = () => {
       const ta = document.createElement("textarea");
       ta.value = content;
@@ -328,10 +330,20 @@ export default function ChatInterface({
   };
 
   // Automatically scroll to bottom of chat on new content - optimized for lag-free mobile frames
+  const rowVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => messagesParentRef.current,
+    estimateSize: () => 110,
+    overscan: 6,
+  });
+
   useEffect(() => {
-    const isMobile = window.innerWidth < 768;
-    messagesEndRef.current?.scrollIntoView({ behavior: isMobile ? "auto" : "smooth" });
-  }, [messages, isSending]);
+    if (!messagesParentRef.current) return;
+    if (messages.length === 0) return;
+    if (isUserScrolling) return;
+
+    rowVirtualizer.scrollToIndex(messages.length - 1, { align: 'end' });
+  }, [messages, isSending, isUserScrolling, rowVirtualizer]);
 
   const readFileAsBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -711,7 +723,15 @@ export default function ChatInterface({
       </div>
 
       {/* 2. Chat Timeline Section - Padding matched perfectly for floating buttons blend */}
-      <div className="flex-1 overflow-y-auto px-4 pt-20 pb-6 md:px-8 space-y-6 scrollbar-thin z-10">
+      <div
+        ref={messagesParentRef}
+        onScroll={() => {
+          if (!messagesParentRef.current) return;
+          const { scrollTop, scrollHeight, clientHeight } = messagesParentRef.current;
+          setIsUserScrolling(scrollTop + clientHeight < scrollHeight - 20);
+        }}
+        className="flex-1 overflow-y-auto px-4 pt-20 pb-6 md:px-8 space-y-0 scrollbar-thin z-10"
+      >
         {messages.length === 0 ? (
           /* Empty state view */
           <div className="h-full flex flex-col justify-center items-center max-w-2xl mx-auto space-y-6 text-center select-none py-12">
@@ -731,8 +751,144 @@ export default function ChatInterface({
           </div>
         ) : (
           /* Timeline messages list resembling ChatGPT styled layout */
-          <div className="max-w-3xl mx-auto space-y-8 py-4 px-1">
-            {messages.map((msg) => {
+          <div className="relative max-w-3xl mx-auto py-4 px-1">
+            <div style={{ height: rowVirtualizer.getTotalSize() }}>
+              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                const msg = messages[virtualRow.index];
+                const isUser = msg.role === "user";
+
+                return (
+                  <div
+                    key={msg.id}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      transform: `translateY(${virtualRow.start}px)`,
+                    }}
+                    className="space-y-8"
+                  >
+                    {isUser ? (
+                      <div
+                        className="flex flex-col items-end w-full space-y-1.5 mb-6 group animate-fade-in"
+                      >
+                        <div className="flex items-center space-x-2 text-[10px] font-mono text-zinc-500 mr-2 selection:bg-none">
+                          <span className="font-semibold uppercase tracking-wider text-zinc-400">You</span>
+                          <span>•</span>
+                          <span>{msg.timestamp}</span>
+                        </div>
+
+                        <div
+                          onClick={() => handleUserMessageClick(msg.id, msg.content)}
+                          className="relative flex flex-col max-w-[85%] md:max-w-[70%] rounded-[20px] bg-white/[0.06] hover:bg-white/[0.08] border border-white/10 hover:border-white/15 text-zinc-100 px-5 pt-3.5 pb-8 shadow-lg transition-all duration-300 cursor-pointer active:scale-[0.99] group/bubble"
+                        >
+                          {msg.content ? (
+                            <div className="text-[14px] leading-relaxed select-text w-full">
+                              {renderMessageContent(msg.content)}
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-1 py-1 px-1">
+                              <div className={`h-1.5 w-1.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "0s", animationDuration: "1s" }} />
+                              <div className={`h-1.5 w-1.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "150ms", animationDuration: "1s" }} />
+                              <div className={`h-1.5 w-1.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "300ms", animationDuration: "1s" }} />
+                            </div>
+                          )}
+
+                          {msg.files && msg.files.length > 0 ? (
+                            <div className="mt-3 w-full flex flex-wrap gap-3">
+                              {msg.files.map((file, idx) => (
+                                <FilePreview
+                                  key={idx}
+                                  fileName={file.fileName}
+                                  fileType={file.fileType as any}
+                                  fileData={file.rawContent}
+                                  pageCount={file.pageCount}
+                                />
+                              ))}
+                            </div>
+                          ) : msg.fileType ? (
+                            <FilePreview
+                              fileName={msg.fileName || "file"}
+                              fileType={msg.fileType}
+                              fileData={msg.fileData}
+                            />
+                          ) : null}
+
+                          <div
+                            className={`absolute bottom-2 right-3 flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-zinc-950/75 border border-white/5 text-[10px] text-zinc-400 transition-all duration-300 ${
+                              tappedMessageId === msg.id 
+                                ? "opacity-100 scale-100 translate-y-0 text-emerald-400" 
+                                : "opacity-0 md:group-hover/bubble:opacity-100 scale-90 translate-y-1"
+                            }`}
+                          >
+                            {copiedMessageId === msg.id ? (
+                              <>
+                                <Check size={11} className="text-emerald-400 shrink-0" />
+                                <span className="text-[9px] text-emerald-400 font-mono font-bold uppercase tracking-wider">Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={11} className="shrink-0" />
+                                <span className="text-[9px] font-mono tracking-wider hidden md:inline">COPY</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="w-full flex flex-col items-start space-y-2 mb-8 group pl-1 animate-fade-in border-b border-white/[0.02] last:border-0 pb-6">
+                        <div className="flex items-center space-x-3 text-[10px] font-mono text-zinc-400">
+                          <div className={`flex h-6 w-6 items-center justify-center rounded-md border border-white/10 bg-zinc-950 text-[10px] font-black tracking-tighter ${theme.textColor}`}>
+                            IG
+                          </div>
+                          <div className="flex items-center space-x-1.5">
+                            <span className="font-extrabold uppercase tracking-widest text-zinc-200">Igris Commander</span>
+                            <span className="text-zinc-650">•</span>
+                            <span className="text-zinc-500">{msg.timestamp}</span>
+                          </div>
+                        </div>
+
+                        <div className="w-full text-zinc-200 leading-relaxed font-sans text-sm md:text-[14.5px] pl-0.5 max-w-full overflow-hidden select-text">
+                          {msg.content ? (
+                            <>
+                              <div className="prose prose-invert max-w-none text-zinc-200">
+                                {renderMessageContent(msg.content)}
+                              </div>
+
+                              <div className="flex items-center justify-start mt-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200">
+                                <button
+                                  onClick={() => handleCopyMessage(msg.id, msg.content)}
+                                  className="flex items-center space-x-1 p-1 px-1.5 rounded text-zinc-400 hover:text-white hover:bg-white/5 transition active:scale-95 touch-manipulation cursor-pointer"
+                                  title="Copy response text"
+                                >
+                                  {copiedMessageId === msg.id ? (
+                                    <>
+                                      <Check size={11} className="text-emerald-400" />
+                                      <span className="text-[10px] text-emerald-400 font-mono font-bold uppercase">Copied</span>
+                                    </>
+                                  ) : (
+                                    <Copy size={11} />
+                                  )}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex items-center space-x-1.5 py-4 pl-1">
+                              <div className={`h-2.5 w-2.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "0s", animationDuration: "1s" }} />
+                              <div className={`h-2.5 w-2.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "150ms", animationDuration: "1s" }} />
+                              <div className={`h-2.5 w-2.5 rounded-full ${theme.glowingPulseDot} animate-bounce`} style={{ animationDelay: "300ms", animationDuration: "1s" }} />
+                              <span className="text-[10px] text-zinc-500 font-mono tracking-widest uppercase pl-2 animate-pulse">Waiting for IGRIS...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
               const isUser = msg.role === "user";
 
               if (isUser) {
@@ -877,7 +1033,6 @@ export default function ChatInterface({
             })}
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* 3. Message Input Area */}

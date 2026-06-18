@@ -15,7 +15,7 @@ interface ChatInputProps {
   hasAttachments: boolean;
 }
 
-export default function ChatInput({
+function ChatInput({
   inputText,
   onChangeInput,
   onSubmit,
@@ -134,3 +134,5 @@ export default function ChatInput({
     </form>
   );
 }
+
+export default React.memo(ChatInput);

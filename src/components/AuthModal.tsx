@@ -103,20 +103,32 @@ export default function AuthModal({
       const data = await response.json();
       console.log("Backend Response:", data);
 
-      // Save to localStorage as requested:
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("igris_token", data.access_token);
-      localStorage.setItem("igris_user", JSON.stringify(data.user));
+      const backendUser = data.user || {};
+      const token = data.access_token || backendUser.access_token || backendUser.token;
+      const username = backendUser.username || backendUser.name || backendUser.email?.split("@")[0] || "Guest";
+      const emailAddress = backendUser.email || email || "";
+      const photoUrl = backendUser.photoUrl || backendUser.picture || backendUser.profile_picture || backendUser.avatar_url || backendUser.image;
 
-      // Invoke original authenticate callback so state gets updated:
-      onAuthenticate({
-        username: data.user.username,
-        email: data.user.email,
-        token: data.access_token
-      });
+      if (!token) {
+        throw new Error("Invalid authentication response: missing token.");
+      }
 
-      // Redirect user to: /dashboard
-      window.location.href = "/dashboard";
+      const authenticatedUser = {
+        username,
+        email: emailAddress,
+        photoUrl,
+        token,
+        rememberMe,
+      };
+
+      localStorage.setItem("access_token", token);
+      localStorage.setItem("igris_token", token);
+      localStorage.setItem("igris_user", JSON.stringify(authenticatedUser));
+
+      onAuthenticate(authenticatedUser);
+      setSuccessMsg("Authenticated successfully.");
+      setErrorMsg(null);
+      onClose();
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Credential backend alignment failed.");
@@ -184,20 +196,29 @@ export default function AuthModal({
 
       try {
         const res = await onLogin(apiBaseUrl, { email, password });
-        const loggedUsername = email.split("@")[0].toUpperCase();
-        
+        const token = res.access_token || res.token;
+        const username = res.user?.username || res.user?.name || email.split("@")[0] || "Guest";
+        const photoUrl = res.user?.photoUrl || res.user?.picture || res.user?.avatar_url || res.user?.image;
+
+        if (!token) {
+          throw new Error("Invalid login response: missing authentication token.");
+        }
+
+        const authenticatedUser = {
+          username,
+          email,
+          photoUrl,
+          token,
+          rememberMe,
+        };
+
         if (rememberMe) {
           localStorage.setItem("igris_remember_email", email);
         } else {
           localStorage.removeItem("igris_remember_email");
         }
 
-        onAuthenticate({
-          username: loggedUsername,
-          email: email,
-          token: res.access_token,
-          rememberMe: rememberMe,
-        });
+        onAuthenticate(authenticatedUser);
         onClose();
       } catch (err: any) {
         console.error(err);

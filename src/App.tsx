@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { 
   getStoredApiUrl, setStoredApiUrl, getStoredToken, setStoredToken, 
   clearStoredToken, getStoredUser, setStoredUser, checkServerStatus, 
@@ -10,9 +10,9 @@ import { ChatSession, Message, User, AppConfig, UploadedFile } from "./types";
 import Sidebar from "./components/Sidebar";
 import ChatInterface from "./components/ChatInterface";
 import AuthModal from "./components/AuthModal";
-import SettingsModal from "./components/SettingsModal";
-import AriseOverlay from "./components/AriseOverlay";
-import TelegramLinkModal from "./components/TelegramLinkModal";
+const SettingsModal = lazy(() => import("./components/SettingsModal"));
+const AriseOverlay = lazy(() => import("./components/AriseOverlay"));
+const TelegramLinkModal = lazy(() => import("./components/TelegramLinkModal"));
 import { Sparkles, Terminal, Info, X } from "lucide-react";
 
 interface CompressedMessage {
@@ -100,7 +100,6 @@ export default function App() {
   // Interface states
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showAriseAnimation, setShowAriseAnimation] = useState(false);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [telegramModalOpen, setTelegramModalOpen] = useState(false);
   const [telegramLinked, setTelegramLinked] = useState<boolean>(() => {
@@ -924,51 +923,46 @@ export default function App() {
       )}
 
       {/* Login & registration modal if triggered */}
-      <AuthModal
-        isOpen={!user && authModalOpen}
-        onAuthenticate={handleAuthenticate}
-        onClose={() => setAuthModalOpen(false)}
-        apiBaseUrl={config.apiBaseUrl}
-        onRegister={registerUser}
-        onLogin={loginUser}
-      />
-
       {/* Settings management modal */}
-      <SettingsModal
-        isOpen={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-        config={config}
-        onChangeConfig={handleUpdateConfig}
-        onTestConnection={handleTestConnection}
-        isTestingConnection={isTestingConnection}
-        connectionStatus={connectionStatus}
-        telegramLinked={telegramLinked}
-        onTelegramLinkedChange={(linked) => {
-          setTelegramLinked(linked);
-          localStorage.setItem("igris_telegram_linked", linked ? "true" : "false");
-        }}
-      />
+      <Suspense fallback={null}>
+        <SettingsModal
+          isOpen={settingsModalOpen}
+          onClose={() => setSettingsModalOpen(false)}
+          config={config}
+          onChangeConfig={handleUpdateConfig}
+          onTestConnection={handleTestConnection}
+          isTestingConnection={isTestingConnection}
+          connectionStatus={connectionStatus}
+          telegramLinked={telegramLinked}
+          onTelegramLinkedChange={(linked) => {
+            setTelegramLinked(linked);
+            localStorage.setItem("igris_telegram_linked", linked ? "true" : "false");
+          }}
+        />
+      </Suspense>
 
       {/* Telegram Link REST portal modal */}
-      <TelegramLinkModal
-        isOpen={telegramModalOpen}
-        onClose={() => setTelegramModalOpen(false)}
-        accentColor={config.themeAccent}
-        onSuccessToast={(text) => showToast("success", text)}
-        activeApiBaseUrl={config.apiBaseUrl}
-        activeAuthToken={user?.token || getStoredToken() || ""}
-        onTelegramLinkedChange={(linked) => {
-          setTelegramLinked(linked);
-          localStorage.setItem("igris_telegram_linked", linked ? "true" : "false");
-        }}
-      />
+      <Suspense fallback={null}>
+        <TelegramLinkModal
+          isOpen={telegramModalOpen}
+          onClose={() => setTelegramModalOpen(false)}
+          accentColor={config.themeAccent}
+          onSuccessToast={(text) => showToast("success", text)}
+          activeApiBaseUrl={config.apiBaseUrl}
+          activeAuthToken={user?.token || getStoredToken() || ""}
+          onTelegramLinkedChange={(linked) => {
+            setTelegramLinked(linked);
+            localStorage.setItem("igris_telegram_linked", linked ? "true" : "false");
+          }}
+        />
+      </Suspense>
 
       {/* Prompt login overlay block for outstanding security alignment if logged out */}
       {!user && (
         <AuthModal
           isOpen={true}
           onAuthenticate={handleAuthenticate}
-          onClose={() => setAuthModalOpen(false)}
+          onClose={() => undefined}
           apiBaseUrl={config.apiBaseUrl}
           onRegister={registerUser}
           onLogin={loginUser}
@@ -977,7 +971,9 @@ export default function App() {
 
       {/* Cinematic takeover animation overlay */}
       {showAriseAnimation && (
-        <AriseOverlay onClose={() => setShowAriseAnimation(false)} />
+        <Suspense fallback={null}>
+          <AriseOverlay onClose={() => setShowAriseAnimation(false)} />
+        </Suspense>
       )}
     </div>
   );

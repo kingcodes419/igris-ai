@@ -15,6 +15,7 @@ export interface Message {
 export interface User {
   username: string;
   email: string;
+  photoUrl?: string;
   token?: string;
   rememberMe?: boolean;
 }

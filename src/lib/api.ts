@@ -1,10 +1,10 @@
 import { ChatSession, Message, User, UploadedFile } from "../types";
 
-const DEFAULT_URL = "/api/proxy";
+const DEFAULT_URL = import.meta.env.VITE_API_URL || "/api/proxy";
 
 export function getStoredApiUrl(): string {
-  localStorage.setItem("igris_api_url", DEFAULT_URL);
-  return DEFAULT_URL;
+  const storedUrl = localStorage.getItem("igris_api_url");
+  return storedUrl || DEFAULT_URL;
 }
 
 export function setStoredApiUrl(url: string) {

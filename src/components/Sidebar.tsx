@@ -32,7 +32,7 @@ interface SidebarProps {
   onTogglePinSession: (id: number) => void;
 }
 
-export default function Sidebar({
+React.memo(Sidebar);
   isOpen,
   onToggle,
   sessions,
@@ -323,15 +323,22 @@ export default function Sidebar({
        {/* 4. Footer Profile box with settings */}
       <div className="border-t border-white/5 bg-zinc-950 px-6 py-6 flex items-center justify-between">
         <div className="flex items-center space-x-2.5 min-w-0">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-lg border font-sans font-bold text-sm tracking-wide ${theme.avatar} overflow-hidden`}>
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full border border-white/10 overflow-hidden ${theme.avatar}`}>
             {user?.photoUrl ? (
-                <img src={user.photoUrl} alt="User" className="h-full w-full object-cover" />
+              <img
+                src={user.photoUrl}
+                alt={user.username ? `${user.username} avatar` : "User avatar"}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
             ) : (
-                user?.username ? user.username.substring(0, 2).toUpperCase() : "G"
+              <span className="text-sm font-semibold uppercase text-zinc-100">
+                {user?.username ? user.username.substring(0, 2).toUpperCase() : "G"}
+              </span>
             )}
           </div>
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-xs font-mono font-bold text-zinc-200">
+            <p className="truncate text-sm font-semibold text-white">
               {user?.username || "Guest Monarch"}
             </p>
             <p className="truncate text-xs text-zinc-400/80 font-medium">
